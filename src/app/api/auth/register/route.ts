@@ -1,5 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
+import { NextRequest, NextResponse } from 'next/server'
 import { hashPassword, validatePassword } from '@/lib/auth/password'
 import { prisma } from '@/lib/db/prisma'
 
@@ -13,6 +12,15 @@ function isAdminEmail(email: string) {
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean)
     .includes(email)
+}
+
+function isPrismaErrorCode(error: unknown, code: string) {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === code
+  )
 }
 
 export async function POST(req: NextRequest) {
@@ -50,7 +58,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ user }, { status: 201 })
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    if (isPrismaErrorCode(error, 'P2002')) {
       return NextResponse.json({ error: '该邮箱已注册，请直接登录' }, { status: 409 })
     }
 

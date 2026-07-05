@@ -1,7 +1,15 @@
-﻿import { NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
+import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/db/prisma'
+
+function isPrismaErrorCode(error: unknown, code: string) {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === code
+  )
+}
 
 export async function getCurrentUser() {
   const session = await auth()
@@ -65,7 +73,7 @@ export function authRouteErrorResponse(error: unknown) {
     return NextResponse.json({ error: '需要管理员权限' }, { status: 403 })
   }
 
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+  if (isPrismaErrorCode(error, 'P2025')) {
     return NextResponse.json({ error: '资源不存在或无权访问' }, { status: 404 })
   }
 
