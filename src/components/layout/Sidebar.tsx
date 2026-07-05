@@ -40,16 +40,18 @@ export function Sidebar() {
 
   const content = (
     <>
-      <div className="flex items-center gap-2 px-4 py-5 border-b border-slate-100">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600">
+      <div className="border-b border-rose-100/80 px-4 py-5">
+        <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-blue-600 shadow-[0_14px_30px_rgba(225,29,72,0.28)]">
           <Sparkles className="h-5 w-5 text-white" />
         </div>
         <div>
-          <div className="font-bold text-slate-900">PostFlow</div>
-          <div className="text-xs text-slate-500">创流 · Demo</div>
+          <div className="font-display text-base font-bold text-slate-950">PostFlow</div>
+          <div className="text-xs font-medium text-rose-500">创流 · AI Studio</div>
+        </div>
         </div>
       </div>
-      <nav className="flex-1 space-y-1 p-3">
+      <nav className="flex-1 space-y-1.5 p-3">
         {navItems.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + '/')
           return (
@@ -58,8 +60,10 @@ export function Sidebar() {
               href={href}
               onClick={() => setMobileOpen(false)}
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                active ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
+                'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200',
+                active
+                  ? 'bg-gradient-to-r from-rose-50 to-blue-50 text-rose-700 shadow-sm ring-1 ring-rose-100'
+                  : 'text-slate-600 hover:bg-white hover:text-rose-700 hover:shadow-sm'
               )}
             >
               <Icon className="h-4 w-4" />
@@ -72,8 +76,10 @@ export function Sidebar() {
             href="/admin"
             onClick={() => setMobileOpen(false)}
             className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-              pathname.startsWith('/admin') ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
+              'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200',
+              pathname.startsWith('/admin')
+                ? 'bg-gradient-to-r from-rose-50 to-blue-50 text-rose-700 shadow-sm ring-1 ring-rose-100'
+                : 'text-slate-600 hover:bg-white hover:text-rose-700 hover:shadow-sm'
             )}
           >
             <ShieldCheck className="h-4 w-4" />
@@ -82,9 +88,18 @@ export function Sidebar() {
         )}
       </nav>
       {user && (
-        <div className="border-t border-slate-100 p-4 text-xs text-slate-500">
+        <div className="m-3 rounded-2xl border border-rose-100 bg-white/75 p-4 text-xs text-slate-500 shadow-sm">
           <div className="truncate font-medium text-slate-700">{user.email}</div>
-          <div className="mt-1">AI 额度 {user.aiQuotaUsed}/{user.aiQuotaLimit}</div>
+          <div className="mt-2 flex items-center justify-between">
+            <span>AI 额度</span>
+            <span className="font-semibold text-rose-600">{user.aiQuotaUsed}/{user.aiQuotaLimit}</span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-rose-100">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-blue-600 to-rose-600"
+              style={{ width: `${Math.min(100, (user.aiQuotaUsed / Math.max(1, user.aiQuotaLimit)) * 100)}%` }}
+            />
+          </div>
         </div>
       )}
     </>
@@ -93,17 +108,17 @@ export function Sidebar() {
   return (
     <>
       <button
-        className="fixed left-4 top-4 z-40 rounded-lg bg-white p-2 shadow md:hidden"
+        className="fixed left-4 top-4 z-40 rounded-xl border border-rose-100 bg-white/90 p-2 shadow-lg backdrop-blur md:hidden"
         onClick={() => setMobileOpen(true)}
       >
         <Menu className="h-5 w-5" />
       </button>
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex min-h-screen">
+      <aside className="hidden min-h-screen w-64 shrink-0 flex-col border-r border-rose-100/80 bg-white/70 backdrop-blur-xl md:flex">
         {content}
       </aside>
       {mobileOpen && (
-        <aside className="fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-white shadow-xl md:hidden">
-          <button className="absolute right-3 top-4" onClick={() => setMobileOpen(false)}>
+        <aside className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-rose-100 bg-white/95 shadow-xl backdrop-blur md:hidden">
+          <button className="absolute right-3 top-4 rounded-full p-1 hover:bg-rose-50" onClick={() => setMobileOpen(false)}>
             <X className="h-5 w-5" />
           </button>
           {content}

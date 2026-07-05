@@ -10,7 +10,7 @@ import { AiConfigBanner } from '@/components/studio/AiConfigBanner'
 import { useDemoStore } from '@/lib/store/DemoStoreContext'
 import type { ContentDraft, DraftVersion, Platform, User } from '@/types'
 import { cn } from '@/lib/utils'
-import { Sparkles } from 'lucide-react'
+import { Link2, Sparkles, Wand2 } from 'lucide-react'
 import { loadAiConfig } from '@/lib/ai/config'
 
 export default function StudioNewPage() {
@@ -111,11 +111,37 @@ export default function StudioNewPage() {
   return (
     <>
       <TopBar title="新建创作" breadcrumb="Studio" />
-      <div className="mx-auto max-w-3xl p-6 space-y-6">
+      <div className="mx-auto max-w-5xl space-y-6 p-6">
         <AiConfigBanner />
 
+        <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="overflow-hidden rounded-[2rem] border border-rose-100 bg-slate-950 text-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
+            <div className="relative p-8">
+              <div className="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-rose-500/30 blur-3xl" />
+              <div className="absolute bottom-0 left-8 h-36 w-36 rounded-full bg-blue-500/25 blur-3xl" />
+              <div className="relative">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
+                  <Wand2 className="h-6 w-6 text-rose-200" />
+                </div>
+                <h2 className="mt-6 font-display text-3xl font-bold tracking-tight">
+                  从一个选题开始，生成可发布的多平台图文
+                </h2>
+                <p className="mt-4 text-sm leading-6 text-slate-300">
+                  输入选题、选择平台，PostFlow 会自动生成标题、正文、标签，并保留后续图片与发布流程。
+                </p>
+                <div className="mt-8 grid gap-3 text-sm">
+                  {['平台语气适配', '草稿自动保存', 'AI 额度原子扣减'].map((item) => (
+                    <div key={item} className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
         <Card>
-          <CardBody className="space-y-5">
+          <CardBody className="space-y-6">
             <div>
               <Label>目标平台</Label>
               <div className="mt-2 flex gap-3">
@@ -124,12 +150,12 @@ export default function StudioNewPage() {
                     key={p}
                     onClick={() => togglePlatform(p)}
                     className={cn(
-                      'rounded-lg border-2 px-4 py-2 text-sm font-medium',
+                      'rounded-2xl border px-4 py-3 text-sm font-semibold shadow-sm transition-all duration-200',
                       platforms.includes(p)
                         ? p === 'xhs'
-                          ? 'border-[#FF2442] bg-[#FF2442]/5 text-[#FF2442]'
-                          : 'border-[#07C160] bg-[#07C160]/5 text-[#07C160]'
-                        : 'border-slate-200 text-slate-500'
+                          ? 'border-[#FF2442]/30 bg-[#FF2442]/10 text-[#FF2442]'
+                          : 'border-[#07C160]/30 bg-[#07C160]/10 text-[#058f48]'
+                        : 'border-rose-100 bg-white text-slate-500 hover:border-rose-200 hover:text-rose-600'
                     )}
                   >
                     {p === 'xhs' ? '小红书' : '微信公众号'}
@@ -151,11 +177,15 @@ export default function StudioNewPage() {
 
             <div>
               <Label>参考链接（可选）</Label>
-              <Input
-                value={referenceUrl}
-                onChange={(e) => setReferenceUrl(e.target.value)}
-                placeholder="https://"
-              />
+              <div className="relative">
+                <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={referenceUrl}
+                  onChange={(e) => setReferenceUrl(e.target.value)}
+                  placeholder="https://"
+                  className="pl-9"
+                />
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-3 pt-2">
@@ -173,6 +203,7 @@ export default function StudioNewPage() {
             {error && <p className="text-sm text-red-600">{error}</p>}
           </CardBody>
         </Card>
+        </section>
       </div>
     </>
   )
