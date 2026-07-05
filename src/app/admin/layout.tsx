@@ -15,8 +15,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   if (!user?.isAdmin) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
-        <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+      <div className="flex min-h-screen items-center justify-center bg-rose-50/60 px-6">
+        <div className="max-w-md rounded-3xl border border-rose-100 bg-white/90 p-8 text-center shadow-[0_24px_60px_rgba(15,23,42,0.12)] backdrop-blur">
           <Badge color="warning">需要管理员权限</Badge>
           <h1 className="mt-4 text-2xl font-semibold text-slate-950">无法访问管理后台</h1>
           <p className="mt-3 text-sm leading-6 text-slate-500">
@@ -37,15 +37,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
+    <div className="min-h-screen bg-rose-50/40">
+      <header className="border-b border-rose-100/80 bg-white/80 shadow-sm backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
           <div>
-            <Link href="/dashboard" className="text-sm text-slate-500 hover:text-slate-900">
+            <Link href="/dashboard" className="text-sm font-medium text-slate-500 hover:text-rose-700">
               返回工作台
             </Link>
             <div className="mt-1 flex items-center gap-2">
-              <h1 className="text-xl font-semibold text-slate-950">PostFlow 管理后台</h1>
+              <h1 className="font-display text-xl font-semibold text-slate-950">PostFlow 管理后台</h1>
               <Badge color="info">Super Admin</Badge>
             </div>
           </div>
@@ -54,7 +54,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link
                 key={item.href}
                 href={item.href}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-rose-50 hover:text-rose-700"
               >
                 {item.label}
               </Link>

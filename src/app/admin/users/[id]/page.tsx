@@ -1,35 +1,174 @@
-﻿import Link from 'next/link'
-import { revalidatePath } from 'next/cache'
+'use client'
+
+import Link from 'next/link'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { useParams } from 'next/navigation'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { getAdminUserDetail, updateAdminUser } from '@/lib/admin/data'
-import { getCurrentUser } from '@/lib/auth/current-user'
 import { platformLabel, statusLabel } from '@/lib/utils'
 
-interface Props {
-  params: Promise<{ id: string }>
+interface AdminUserDetail {
+  id: string
+  email: string
+  name: string | null
+  isAdmin: boolean
+  plan: string
+  aiQuotaUsed: number
+  aiQuotaLimit: number
+  timezone: string
+  onboardingStep: number
+  primaryPlatform: string | null
+  firstPublishAt?: string
+  createdAt: string
+  accounts: Array<{
+    id: string
+    platform: string
+    nickname: string
+    status: string
+    lastHealthCheck?: string
+    createdAt: string
+  }>
+  drafts: Array<{
+    id: string
+    topic: string
+    masterTitle: string
+    status: string
+    updatedAt: string
+  }>
+  publishJobs: Array<{
+    id: string
+    platform: string
+    draftTitle: string
+    status: string
+    createdAt: string
+  }>
+  orders: Array<{
+    id: string
+    orderNo: string
+    productType: string
+    plan: string | null
+    amount: number
+    status: string
+  }>
 }
 
-async function updateUserAction(formData: FormData) {
-  'use server'
-  const id = String(formData.get('id'))
-  await updateAdminUser(id, {
-    plan: String(formData.get('plan')),
-    aiQuotaLimit: Number(formData.get('aiQuotaLimit')),
-    aiQuotaUsed: Number(formData.get('aiQuotaUsed')),
-    isAdmin: formData.get('isAdmin') === 'on',
-  })
-  revalidatePath(`/admin/users/${id}`)
-  revalidatePath('/admin/users')
+function isSupportedPlatform(platform: string): platform is 'xhs' | 'wechat_mp' {
+  return platform === 'xhs' || platform === 'wechat_mp'
 }
 
-export default async function AdminUserDetailPage({ params }: Props) {
-  const currentUser = await getCurrentUser()
-  if (!currentUser?.isAdmin) return null
+function safePlatformLabel(platform: string) {
+  return isSupportedPlatform(platform) ? platformLabel(platform) : platform
+}
 
-  const { id } = await params
-  const user = await getAdminUserDetail(id)
+export default function AdminUserDetailPage() {
+  const params = useParams<{ id: string }>()
+  const id = params.id
+  const [user, setUser] = useState<AdminUserDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadUser() {
+      setLoading(true)
+      setError('')
+      try {
+        const res = await fetch(`/api/admin/users/${id}`, { cache: 'no-store' })
+        if (!res.ok) {
+          const data = (await res.json().catch(() => null)) as { error?: string } | null
+          throw new Error(data?.error ?? '用户详情加载失败')
+        }
+        const data = (await res.json()) as AdminUserDetail
+        if (!cancelled) setUser(data)
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : '用户详情加载失败')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    if (id) void loadUser()
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  const summary = useMemo(() => {
+    if (!user) return []
+    return [
+      { label: '平台账号', value: user.accounts.length },
+      { label: '近期草稿', value: user.drafts.length },
+      { label: '发布任务', value: user.publishJobs.length },
+    ]
+  }, [user])
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!user) return
+
+    const formData = new FormData(event.currentTarget)
+    setSaving(true)
+    setSaved(false)
+    setError('')
+
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan: String(formData.get('plan')),
+          aiQuotaLimit: Number(formData.get('aiQuotaLimit')),
+          aiQuotaUsed: Number(formData.get('aiQuotaUsed')),
+          isAdmin: formData.get('isAdmin') === 'on',
+        }),
+      })
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null
+        throw new Error(data?.error ?? '保存用户失败')
+      }
+
+      const updated = (await res.json()) as Pick<
+        AdminUserDetail,
+        'id' | 'email' | 'isAdmin' | 'plan' | 'aiQuotaUsed' | 'aiQuotaLimit'
+      >
+      setUser((current) => (current ? { ...current, ...updated } : current))
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存用户失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center rounded-3xl border border-rose-100 bg-white text-sm text-slate-500">
+        正在加载用户详情…
+      </div>
+    )
+  }
+
+  if (error && !user) {
+    return (
+      <div className="space-y-4">
+        <Link href="/admin/users" className="text-sm text-indigo-600 hover:underline">
+          返回用户列表
+        </Link>
+        <Card>
+          <CardBody>
+            <div className="text-sm text-red-600">{error}</div>
+          </CardBody>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!user) return null
 
   return (
     <div className="space-y-6">
@@ -50,7 +189,7 @@ export default async function AdminUserDetailPage({ params }: Props) {
             <h3 className="font-semibold">套餐与额度</h3>
           </CardHeader>
           <CardBody>
-            <form action={updateUserAction} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <input type="hidden" name="id" value={user.id} />
               <label className="block text-sm">
                 <span className="text-slate-600">套餐</span>
@@ -91,17 +230,17 @@ export default async function AdminUserDetailPage({ params }: Props) {
                 <input name="isAdmin" type="checkbox" defaultChecked={user.isAdmin} />
                 管理员权限
               </label>
-              <Button type="submit">保存调整</Button>
+              {error && <p className="text-sm text-red-600">{error}</p>}
+              {saved && <p className="text-sm text-green-600">已保存调整</p>}
+              <Button type="submit" disabled={saving}>
+                {saving ? '保存中…' : '保存调整'}
+              </Button>
             </form>
           </CardBody>
         </Card>
 
         <div className="grid gap-4 md:grid-cols-3">
-          {[
-            { label: '平台账号', value: user.accounts.length },
-            { label: '近期草稿', value: user.drafts.length },
-            { label: '发布任务', value: user.publishJobs.length },
-          ].map((item) => (
+          {summary.map((item) => (
             <Card key={item.label}>
               <CardBody>
                 <div className="text-sm text-slate-500">{item.label}</div>
@@ -139,7 +278,7 @@ export default async function AdminUserDetailPage({ params }: Props) {
               <div key={account.id} className="flex items-center justify-between rounded-lg border border-slate-100 p-3">
                 <div>
                   <div className="font-medium text-slate-950">{account.nickname}</div>
-                  <div className="mt-1 text-xs text-slate-500">{platformLabel(account.platform as 'xhs' | 'wechat_mp')}</div>
+                  <div className="mt-1 text-xs text-slate-500">{safePlatformLabel(account.platform)}</div>
                 </div>
                 <Badge color={account.status === 'active' ? 'success' : 'warning'}>{statusLabel(account.status)}</Badge>
               </div>
@@ -163,7 +302,7 @@ export default async function AdminUserDetailPage({ params }: Props) {
                 </Badge>
               </div>
               <div className="mt-1 text-xs text-slate-500">
-                {platformLabel(job.platform as 'xhs' | 'wechat_mp')} · {new Date(job.createdAt).toLocaleString('zh-CN')}
+                {safePlatformLabel(job.platform)} · {new Date(job.createdAt).toLocaleString('zh-CN')}
               </div>
             </div>
           ))}
