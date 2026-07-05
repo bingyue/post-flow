@@ -1,19 +1,47 @@
 ﻿'use client'
 
+import { FormEvent, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { signIn, useSession } from 'next-auth/react'
 import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input, Label } from '@/components/ui/Input'
-import { useDemoStore } from '@/lib/store/DemoStoreContext'
 
 export default function LoginPage() {
-  const { login } = useDemoStore()
   const router = useRouter()
+  const { status } = useSession()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleLogin = () => {
-    login()
+  useEffect(() => {
+    if (status === 'authenticated') {
+      router.replace('/dashboard')
+    }
+  }, [router, status])
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError('')
+    setSubmitting(true)
+
+    const result = await signIn('credentials', {
+      email,
+      password,
+      redirect: false,
+    })
+
+    setSubmitting(false)
+
+    if (result?.error) {
+      setError('邮箱或密码不正确')
+      return
+    }
+
     router.push('/dashboard')
+    router.refresh()
   }
 
   return (
@@ -24,21 +52,38 @@ export default function LoginPage() {
             <Sparkles className="h-6 w-6 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900">登录 PostFlow</h1>
-          <p className="mt-2 text-sm text-slate-500">Demo 模式 · 无需真实账号</p>
+          <p className="mt-2 text-sm text-slate-500">使用已注册邮箱继续创作</p>
         </div>
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={handleLogin}>
           <div>
-            <Label>邮箱</Label>
-            <Input defaultValue="demo@postflow.app" />
+            <Label htmlFor="email">邮箱</Label>
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
           </div>
           <div>
-            <Label>密码</Label>
-            <Input type="password" defaultValue="demo1234" />
+            <Label htmlFor="password">密码</Label>
+            <Input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
           </div>
-          <Button className="w-full" onClick={handleLogin}>
-            一键进入 Demo
+          {error && (
+            <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+          )}
+          <Button className="w-full" type="submit" disabled={submitting}>
+            {submitting ? '登录中…' : '登录'}
           </Button>
-        </div>
+        </form>
         <p className="mt-6 text-center text-sm text-slate-500">
           还没有账号？{' '}
           <Link href="/register" className="text-indigo-600 hover:underline">

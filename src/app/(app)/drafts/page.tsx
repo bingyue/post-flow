@@ -11,7 +11,7 @@ import { formatDate, statusLabel } from '@/lib/utils'
 import type { DraftStatus } from '@/types'
 
 export default function DraftsPage() {
-  const { drafts } = useDemoStore()
+  const { drafts, deleteDraft } = useDemoStore()
   const [filter, setFilter] = useState<DraftStatus | 'all'>('all')
   const [versionDraftId, setVersionDraftId] = useState<string | null>(null)
 
@@ -65,6 +65,14 @@ export default function DraftsPage() {
                         onClick={() => setVersionDraftId(d.id)}
                       >
                         版本
+                      </button>
+                      <button
+                        className="text-red-500 hover:underline"
+                        onClick={() => {
+                          if (window.confirm('确认删除这个草稿吗？')) deleteDraft(d.id)
+                        }}
+                      >
+                        删除
                       </button>
                     </td>
                   </tr>

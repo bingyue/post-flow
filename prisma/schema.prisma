@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id              String            @id @default(cuid())
+  email           String            @unique
+  passwordHash    String
+  name            String?
+  plan            String            @default("free")
+  aiQuotaUsed     Float             @default(0)
+  aiQuotaLimit    Float             @default(5)
+  timezone        String            @default("Asia/Shanghai")
+  onboardingStep  Int               @default(0)
+  primaryPlatform String?
+  firstPublishAt  DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  accounts        PlatformAccount[]
+  drafts          ContentDraft[]
+  publishJobs     PublishJob[]
+}
+
+model PlatformAccount {
+  id              String       @id @default(cuid())
+  userId          String
+  platform        String
+  nickname        String
+  avatarUrl       String
+  status          String
+  encryptedToken  String?
+  errorMessage    String?
+  lastHealthCheck DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publishJobs     PublishJob[]
+
+  @@index([userId, platform])
+}
+
+model ContentDraft {
+  id                      String            @id @default(cuid())
+  userId                  String
+  topic                   String
+  platformTargets         String
+  masterTitle             String            @default("")
+  masterBody              String            @default("")
+  masterTags              String            @default("[]")
+  status                  String            @default("draft")
+  referenceUrl            String?
+  imagePrompt             String?
+  selectedCoverByPlatform String            @default("{}")
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  user                    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions                DraftVersion[]
+  variants                PlatformVariant[]
+  images                  DraftImage[]
+  publishJobs             PublishJob[]
+
+  @@index([userId, status])
+}
+
+model DraftVersion {
+  id        String       @id @default(cuid())
+  draftId   String
+  title     String
+  body      String
+  tags      String       @default("[]")
+  source    String
+  createdAt DateTime     @default(now())
+  draft     ContentDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@index([draftId, createdAt])
+}
+
+model PlatformVariant {
+  id           String       @id @default(cuid())
+  draftId      String
+  platform     String
+  title        String
+  body         String
+  bodyHtml     String?
+  tags         String       @default("[]")
+  coverImageId String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  draft        ContentDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  publishJobs  PublishJob[]
+
+  @@unique([draftId, platform])
+  @@index([draftId])
+}
+
+model DraftImage {
+  id        String       @id @default(cuid())
+  draftId   String
+  url       String
+  width     Int
+  height    Int
+  role      String
+  source    String
+  prompt    String?
+  platform  String?
+  createdAt DateTime     @default(now())
+  draft     ContentDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@index([draftId, platform])
+}
+
+model PublishJob {
+  id           String          @id @default(cuid())
+  userId       String
+  draftId      String
+  variantId    String
+  accountId    String
+  platform     String
+  draftTitle   String
+  mode         String
+  scheduledAt  DateTime?
+  status       String
+  platformUrl  String?
+  errorCode    String?
+  errorMessage String?
+  retryCount   Int             @default(0)
+  createdAt    DateTime        @default(now())
+  completedAt  DateTime?
+  updatedAt    DateTime        @updatedAt
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  draft        ContentDraft    @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  variant      PlatformVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  account      PlatformAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([draftId])
+}
+

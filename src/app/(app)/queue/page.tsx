@@ -1,14 +1,17 @@
 ﻿'use client'
 
+import { useState } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { simulatePublish, useDemoStore } from '@/lib/store/DemoStoreContext'
+import { useDemoStore } from '@/lib/store/DemoStoreContext'
 import { formatDate, platformLabel, statusLabel } from '@/lib/utils'
+import type { PublishJob } from '@/types'
 
 export default function QueuePage() {
   const { publishJobs, updatePublishJob, updateDraft } = useDemoStore()
+  const [runningJobId, setRunningJobId] = useState<string | null>(null)
 
   const scheduled = publishJobs.filter(
     (j) => j.mode === 'scheduled' && (j.status === 'queued' || j.status === 'running')
@@ -48,19 +51,25 @@ export default function QueuePage() {
                     </Button>
                     <Button
                       size="sm"
-                      onClick={() => {
+                      disabled={runningJobId === j.id}
+                      onClick={async () => {
+                        setRunningJobId(j.id)
                         updatePublishJob(j.id, {
                           mode: 'immediate',
                           scheduledAt: undefined,
                           status: 'running',
                         })
                         updateDraft(j.draftId, { status: 'publishing' })
-                        simulatePublish(j.id, j.platform, updatePublishJob, () => {
+                        const response = await fetch(`/api/v1/publish/${j.id}/simulate`, { method: 'POST' })
+                        if (response.ok) {
+                          const job = (await response.json()) as PublishJob
+                          updatePublishJob(job.id, job)
                           updateDraft(j.draftId, { status: 'published' })
-                        })
+                        }
+                        setRunningJobId(null)
                       }}
                     >
-                      立即发布
+                      {runningJobId === j.id ? '发布中…' : '立即发布'}
                     </Button>
                   </div>
                 </div>

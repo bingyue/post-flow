@@ -12,14 +12,13 @@ import { AiConfigBanner } from '@/components/studio/AiConfigBanner'
 import { Toast } from '@/components/ui/Dialog'
 import { useDemoStore } from '@/lib/store/DemoStoreContext'
 import { loadAiConfig } from '@/lib/ai/config'
-import { generateContent } from '@/lib/ai/client'
-import type { GenerateAction } from '@/types'
+import type { ContentDraft, DraftVersion, GenerateAction, User } from '@/types'
 import { ArrowRight, Sparkles } from 'lucide-react'
 
 export default function StudioEditPage({ params }: { params: Promise<{ draftId: string }> }) {
   const { draftId } = use(params)
   const router = useRouter()
-  const { drafts, updateDraft, consumeAiQuota, addDraftVersion } = useDemoStore()
+  const { drafts, updateDraft, updateUser, addDraftVersion } = useDemoStore()
   const draft = drafts.find((d) => d.id === draftId)
 
   const [title, setTitle] = useState('')
@@ -47,35 +46,43 @@ export default function StudioEditPage({ params }: { params: Promise<{ draftId: 
   }, [save])
 
   const runAction = async (action: GenerateAction) => {
-    const cost = action === 'full' ? 1 : 0.5
-    if (!draft || !consumeAiQuota(cost)) {
-      setToast('AI 额度不足')
+    if (!draft) return
+    setLoading(true)
+    const config = loadAiConfig()
+    const response = await fetch(`/api/v1/drafts/${draftId}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiBase: config.llmApiBase,
+        apiKey: config.llmApiKey,
+        model: config.llmModel,
+        action,
+        topic: draft.topic,
+        platform: draft.platformTargets[0] ?? 'xhs',
+        currentDraft: { title, body },
+      }),
+    })
+
+    if (!response.ok) {
+      setLoading(false)
+      setToast(response.status === 402 ? 'AI 额度不足' : 'AI 生成失败，请稍后重试')
       return
     }
-    setLoading(true)
-    const result = await generateContent(loadAiConfig(), {
-      action,
-      topic: draft.topic,
-      platform: draft.platformTargets[0] ?? 'xhs',
-      currentDraft: { title, body },
-    })
-    setTitle(result.title)
-    setBody(result.body)
-    setTags(result.tags)
-    addDraftVersion(draftId, {
-      title: result.title,
-      body: result.body,
-      tags: result.tags,
-      source: 'ai_rewrite',
-    })
-    updateDraft(draftId, {
-      masterTitle: result.title,
-      masterBody: result.body,
-      masterTags: result.tags,
-      imagePrompt: result.imagePrompt,
-    })
+
+    const data = (await response.json()) as {
+      result: { title: string; body: string; tags: string[]; source: 'ai' | 'mock' }
+      draft: ContentDraft
+      version: DraftVersion
+      user: User
+    }
+    setTitle(data.result.title)
+    setBody(data.result.body)
+    setTags(data.result.tags)
+    addDraftVersion(draftId, data.version)
+    updateDraft(draftId, data.draft)
+    updateUser(data.user)
     setLoading(false)
-    setToast(result.source === 'mock' ? 'Mock 生成（未配置 Key 或请求失败）' : 'AI 生成完成')
+    setToast(data.result.source === 'mock' ? 'Mock 生成（未配置 Key 或请求失败）' : 'AI 生成完成')
   }
 
   if (!draft) {

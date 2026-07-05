@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { Label, Input, Textarea } from '@/components/ui/Input'
 import { StudioStepper } from '@/components/studio/StudioStepper'
 import { useDemoStore } from '@/lib/store/DemoStoreContext'
-import { adaptToPlatforms, diffText } from '@/lib/adapter'
+import { diffText } from '@/lib/adapter'
 import type { Platform, PlatformVariant } from '@/types'
 import { ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -32,9 +32,13 @@ export default function StudioAdaptPage({ params }: { params: Promise<{ draftId:
       }
       return
     }
-    const adapted = adaptToPlatforms(draftId, draft, draft.platformTargets)
-    adapted.forEach((v) => upsertVariant(v))
-    setLocalVariants(adapted)
+    void fetch(`/api/v1/drafts/${draftId}/adapt`, { method: 'POST' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((saved: PlatformVariant[] | null) => {
+        if (!saved) return
+        saved.forEach((v) => upsertVariant(v))
+        setLocalVariants(saved)
+      })
     if (!draft.platformTargets.includes(activePlatform)) {
       setActivePlatform(draft.platformTargets[0])
     }

@@ -159,9 +159,9 @@ export default function SettingsPage() {
         {tab === 'general' && (
           <Card>
             <CardBody className="space-y-4">
-              <p className="text-sm text-slate-600">重置 Demo 数据为初始 Mock 状态（保留登录）。</p>
+              <p className="text-sm text-slate-600">清理本地缓存并重新读取当前账号的数据库状态。</p>
               <Button variant="danger" onClick={resetDemo}>
-                重置 Demo 数据
+                刷新工作区数据
               </Button>
             </CardBody>
           </Card>

@@ -8,18 +8,18 @@ import { Button } from '@/components/ui/Button'
 import { Label, Textarea, Input } from '@/components/ui/Input'
 import { AiConfigBanner } from '@/components/studio/AiConfigBanner'
 import { useDemoStore } from '@/lib/store/DemoStoreContext'
-import type { Platform } from '@/types'
+import type { ContentDraft, DraftVersion, Platform, User } from '@/types'
 import { cn } from '@/lib/utils'
 import { Sparkles } from 'lucide-react'
 import { loadAiConfig } from '@/lib/ai/config'
-import { generateContent } from '@/lib/ai/client'
 
 export default function StudioNewPage() {
   const router = useRouter()
-  const { createDraft, consumeAiQuota, addDraftVersion } = useDemoStore()
+  const { createDraft, updateDraft, updateUser, addDraftVersion } = useDemoStore()
   const [platforms, setPlatforms] = useState<Platform[]>(['xhs'])
   const [topic, setTopic] = useState('')
   const [referenceUrl, setReferenceUrl] = useState('')
+  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const togglePlatform = (p: Platform) => {
@@ -30,42 +30,81 @@ export default function StudioNewPage() {
 
   const handleCreate = async () => {
     if (topic.length < 10) return
-    if (!consumeAiQuota(1)) {
-      alert('AI 额度已用完')
-      return
-    }
+    setError('')
     setLoading(true)
     const primary = platforms[0]
-    const result = await generateContent(loadAiConfig(), {
-      action: 'full',
-      topic,
-      platform: primary,
+
+    const createdResponse = await fetch('/api/v1/drafts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic,
+        platformTargets: platforms,
+        referenceUrl: referenceUrl || undefined,
+      }),
     })
-    const draft = createDraft({
-      topic,
-      platformTargets: platforms,
-      masterTitle: result.title,
-      masterBody: result.body,
-      masterTags: result.tags,
-      referenceUrl: referenceUrl || undefined,
-      imagePrompt: result.imagePrompt,
+
+    if (!createdResponse.ok) {
+      setLoading(false)
+      setError('草稿创建失败，请稍后重试')
+      return
+    }
+
+    const draft = (await createdResponse.json()) as ContentDraft
+    createDraft(draft)
+
+    const config = loadAiConfig()
+    const generateResponse = await fetch(`/api/v1/drafts/${draft.id}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiBase: config.llmApiBase,
+        apiKey: config.llmApiKey,
+        model: config.llmModel,
+        action: 'full',
+        topic,
+        platform: primary,
+      }),
     })
-    addDraftVersion(draft.id, {
-      title: result.title,
-      body: result.body,
-      tags: result.tags,
-      source: result.source === 'ai' ? 'ai_full' : 'manual',
-    })
+
+    if (!generateResponse.ok) {
+      setLoading(false)
+      setError(generateResponse.status === 402 ? 'AI 额度已用完' : 'AI 生成失败，已为你保留空白草稿')
+      router.push(`/studio/${draft.id}`)
+      return
+    }
+
+    const data = (await generateResponse.json()) as {
+      draft: ContentDraft
+      version: DraftVersion
+      user: User
+    }
+    updateDraft(draft.id, data.draft)
+    addDraftVersion(draft.id, data.version)
+    updateUser(data.user)
     setLoading(false)
     router.push(`/studio/${draft.id}`)
   }
 
-  const handleBlank = () => {
-    const draft = createDraft({
-      topic,
-      platformTargets: platforms,
-      referenceUrl: referenceUrl || undefined,
+  const handleBlank = async () => {
+    setError('')
+    setLoading(true)
+    const response = await fetch('/api/v1/drafts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic,
+        platformTargets: platforms,
+        referenceUrl: referenceUrl || undefined,
+      }),
     })
+    setLoading(false)
+    if (!response.ok) {
+      setError('草稿创建失败，请稍后重试')
+      return
+    }
+    const draft = (await response.json()) as ContentDraft
+    createDraft(draft)
     router.push(`/studio/${draft.id}`)
   }
 
@@ -131,6 +170,7 @@ export default function StudioNewPage() {
                 空白草稿
               </Button>
             </div>
+            {error && <p className="text-sm text-red-600">{error}</p>}
           </CardBody>
         </Card>
       </div>

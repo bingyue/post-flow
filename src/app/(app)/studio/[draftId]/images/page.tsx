@@ -9,8 +9,7 @@ import { Label, Textarea } from '@/components/ui/Input'
 import { StudioStepper } from '@/components/studio/StudioStepper'
 import { useDemoStore } from '@/lib/store/DemoStoreContext'
 import { loadAiConfig } from '@/lib/ai/config'
-import { generateImage } from '@/lib/ai/client'
-import type { Platform } from '@/types'
+import type { ContentDraft, DraftImage, Platform } from '@/types'
 import { ArrowRight, Upload, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -33,30 +32,46 @@ export default function StudioImagesPage({ params }: { params: Promise<{ draftId
   const generateForPlatform = async (platform: Platform) => {
     setLoading(true)
     const size = platform === 'xhs' ? '1080x1440' : '900x383'
-    const result = await generateImage(loadAiConfig(), {
-      prompt: prompt || `Cover for: ${draft.topic}`,
-      size,
+    const config = loadAiConfig()
+    const response = await fetch(`/api/v1/drafts/${draftId}/images/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiBase: config.imageApiBase || config.llmApiBase,
+        apiKey: config.imageApiKey,
+        model: config.imageModel,
+        prompt: prompt || `Cover for: ${draft.topic}`,
+        platform,
+        size,
+      }),
     })
-    const dims = platform === 'xhs' ? { width: 1080, height: 1440 } : { width: 900, height: 383 }
-    addImage({
-      draftId,
-      url: result.url,
-      ...dims,
-      role: 'cover',
-      source: result.source === 'ai' ? 'ai' : 'mock',
-      prompt,
-      platform,
-    })
+    if (response.ok) {
+      const image = (await response.json()) as DraftImage
+      addImage(image)
+    } else {
+      alert('图片生成失败，请稍后重试')
+    }
     setLoading(false)
   }
 
-  const selectCover = (platform: Platform, imageId: string) => {
-    updateDraft(draftId, {
-      selectedCoverByPlatform: {
-        ...draft.selectedCoverByPlatform,
-        [platform]: imageId,
-      },
+  const selectCover = async (platform: Platform, imageId: string) => {
+    const selectedCoverByPlatform = {
+      ...draft.selectedCoverByPlatform,
+      [platform]: imageId,
+    }
+    updateDraft(draftId, { selectedCoverByPlatform })
+    const response = await fetch(`/api/v1/drafts/${draftId}/images/${imageId}/select`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        platform,
+        selectedCoverByPlatform,
+      }),
     })
+    if (response.ok) {
+      const updated = (await response.json()) as ContentDraft
+      updateDraft(draftId, updated)
+    }
   }
 
   const handleUpload = (platform: Platform, file: File) => {
@@ -64,16 +79,28 @@ export default function StudioImagesPage({ params }: { params: Promise<{ draftId
       alert('文件不能超过 5MB')
       return
     }
-    const url = URL.createObjectURL(file)
     const dims = platform === 'xhs' ? { width: 1080, height: 1440 } : { width: 900, height: 383 }
-    addImage({
-      draftId,
-      url,
-      ...dims,
-      role: 'cover',
-      source: 'upload',
-      platform,
-    })
+    const reader = new FileReader()
+    reader.onload = async () => {
+      if (typeof reader.result !== 'string') return
+      const response = await fetch(`/api/v1/drafts/${draftId}/images/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: reader.result,
+          platform,
+          ...dims,
+        }),
+      })
+      if (response.ok) {
+        const image = (await response.json()) as DraftImage
+        addImage(image)
+      } else {
+        const data = (await response.json().catch(() => null)) as { error?: string } | null
+        alert(data?.error ?? '图片上传失败')
+      }
+    }
+    reader.readAsDataURL(file)
   }
 
   return (

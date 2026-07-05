@@ -9,8 +9,9 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { useSession } from 'next-auth/react'
 import { addDays, isWithinInterval, parseISO } from 'date-fns'
-import { DEMO_USER, SEED_STATE } from '@/lib/mock/seed'
+import { DEMO_USER } from '@/lib/mock/seed'
 import { generateId } from '@/lib/utils'
 import type {
   ContentDraft,
@@ -20,12 +21,36 @@ import type {
   PlatformAccount,
   PlatformVariant,
   PublishJob,
-  PublishJobStatus,
   PublishMode,
   User,
 } from '@/types'
 
 const STORAGE_KEY = 'postflow-demo-state'
+const EMPTY_STATE: DemoState = {
+  user: null,
+  accounts: [],
+  drafts: [],
+  variants: [],
+  images: [],
+  publishJobs: [],
+}
+
+async function apiJson<T>(path: string, init?: RequestInit): Promise<T | null> {
+  try {
+    const res = await fetch(path, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...init?.headers,
+      },
+    })
+    if (!res.ok) throw new Error(await res.text())
+    return (await res.json()) as T
+  } catch (error) {
+    console.warn('PostFlow persistence sync failed:', error)
+    return null
+  }
+}
 
 interface DemoStoreContextValue extends DemoState {
   hydrated: boolean
@@ -36,15 +61,20 @@ interface DemoStoreContextValue extends DemoState {
   createDraft: (data: Partial<ContentDraft>) => ContentDraft
   updateDraft: (id: string, patch: Partial<ContentDraft>) => void
   deleteDraft: (id: string) => void
-  addDraftVersion: (draftId: string, version: Omit<ContentDraft['versions'][0], 'id' | 'draftId' | 'createdAt'>) => void
+  addDraftVersion: (
+    draftId: string,
+    version:
+      | Omit<ContentDraft['versions'][0], 'id' | 'draftId' | 'createdAt'>
+      | ContentDraft['versions'][0]
+  ) => void
   upsertVariant: (variant: PlatformVariant) => void
   updateVariant: (id: string, patch: Partial<PlatformVariant>) => void
-  addImage: (image: Omit<DraftImage, 'id' | 'createdAt'>) => DraftImage
+  addImage: (image: Omit<DraftImage, 'id' | 'createdAt'> | DraftImage) => DraftImage
   updateImage: (id: string, patch: Partial<DraftImage>) => void
   connectAccount: (platform: Platform) => PlatformAccount
   disconnectAccount: (id: string) => void
   refreshAccount: (id: string) => void
-  createPublishJobs: (jobs: Omit<PublishJob, 'id' | 'createdAt' | 'retryCount'>[]) => PublishJob[]
+  createPublishJobs: (jobs: (Omit<PublishJob, 'id' | 'createdAt' | 'retryCount'> | PublishJob)[]) => PublishJob[]
   updatePublishJob: (id: string, patch: Partial<PublishJob>) => void
   consumeAiQuota: (amount?: number) => boolean
   readyDrafts: ContentDraft[]
@@ -55,30 +85,34 @@ interface DemoStoreContextValue extends DemoState {
 
 const DemoStoreContext = createContext<DemoStoreContextValue | null>(null)
 
-function loadState(): DemoState {
-  if (typeof window === 'undefined') return SEED_STATE
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return SEED_STATE
-    return { ...SEED_STATE, ...JSON.parse(raw) } as DemoState
-  } catch {
-    return SEED_STATE
-  }
-}
-
 export function DemoStoreProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<DemoState>(SEED_STATE)
+  const { status } = useSession()
+  const [state, setState] = useState<DemoState>(EMPTY_STATE)
   const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
-    setState(loadState())
-    setHydrated(true)
-  }, [])
+    if (status === 'loading') return
+
+    if (status === 'unauthenticated') {
+      localStorage.removeItem(STORAGE_KEY)
+      setState(EMPTY_STATE)
+      setHydrated(true)
+      return
+    }
+
+    setHydrated(false)
+    setState(EMPTY_STATE)
+    void apiJson<DemoState>('/api/v1/bootstrap')
+      .then((remoteState) => {
+        setState(remoteState ?? EMPTY_STATE)
+      })
+      .finally(() => setHydrated(true))
+  }, [status])
 
   useEffect(() => {
-    if (!hydrated) return
+    if (!hydrated || status === 'authenticated') return
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  }, [state, hydrated])
+  }, [state, hydrated, status])
 
   const login = useCallback((email?: string) => {
     setState((s) => ({
@@ -88,35 +122,50 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY)
     setState((s) => ({ ...s, user: null }))
   }, [])
 
   const resetDemo = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY)
-    setState({ ...SEED_STATE, user: state.user })
-  }, [state.user])
+    setHydrated(false)
+    void apiJson<DemoState>('/api/v1/bootstrap')
+      .then((remoteState) => setState(remoteState ?? EMPTY_STATE))
+      .finally(() => setHydrated(true))
+  }, [])
 
   const updateUser = useCallback((patch: Partial<User>) => {
     setState((s) => (s.user ? { ...s, user: { ...s.user, ...patch } } : s))
+    void apiJson<User>('/api/v1/user', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
   }, [])
 
   const createDraft = useCallback((data: Partial<ContentDraft>) => {
+    const isPersisted = Boolean(data.id)
     const draft: ContentDraft = {
-      id: generateId('draft'),
+      id: data.id ?? generateId('draft'),
       topic: data.topic ?? '',
       platformTargets: data.platformTargets ?? ['xhs'],
       masterTitle: data.masterTitle ?? '',
       masterBody: data.masterBody ?? '',
       masterTags: data.masterTags ?? [],
-      status: 'draft',
+      status: data.status ?? 'draft',
       referenceUrl: data.referenceUrl,
       imagePrompt: data.imagePrompt,
-      selectedCoverByPlatform: {},
-      versions: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      selectedCoverByPlatform: data.selectedCoverByPlatform ?? {},
+      versions: data.versions ?? [],
+      createdAt: data.createdAt ?? new Date().toISOString(),
+      updatedAt: data.updatedAt ?? new Date().toISOString(),
     }
     setState((s) => ({ ...s, drafts: [draft, ...s.drafts] }))
+    if (!isPersisted) {
+      void apiJson<ContentDraft>('/api/v1/drafts', {
+        method: 'POST',
+        body: JSON.stringify(draft),
+      })
+    }
     return draft
   }, [])
 
@@ -127,6 +176,10 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
         d.id === id ? { ...d, ...patch, updatedAt: new Date().toISOString() } : d
       ),
     }))
+    void apiJson<ContentDraft>(`/api/v1/drafts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
   }, [])
 
   const deleteDraft = useCallback((id: string) => {
@@ -136,16 +189,25 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
       variants: s.variants.filter((v) => v.draftId !== id),
       images: s.images.filter((i) => i.draftId !== id),
     }))
+    void apiJson<{ ok: boolean }>(`/api/v1/drafts/${id}`, { method: 'DELETE' })
   }, [])
 
   const addDraftVersion = useCallback(
-    (draftId: string, version: Omit<ContentDraft['versions'][0], 'id' | 'draftId' | 'createdAt'>) => {
-      const v = {
-        ...version,
-        id: generateId('ver'),
-        draftId,
-        createdAt: new Date().toISOString(),
-      }
+    (
+      draftId: string,
+      version:
+        | Omit<ContentDraft['versions'][0], 'id' | 'draftId' | 'createdAt'>
+        | ContentDraft['versions'][0]
+    ) => {
+      const isPersisted = 'id' in version
+      const v = isPersisted
+        ? version
+        : {
+            ...version,
+            id: generateId('ver'),
+            draftId,
+            createdAt: new Date().toISOString(),
+          }
       setState((s) => ({
         ...s,
         drafts: s.drafts.map((d) =>
@@ -154,6 +216,12 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
             : d
         ),
       }))
+      if (!isPersisted) {
+        void apiJson<ContentDraft['versions'][0]>(`/api/v1/drafts/${draftId}/versions`, {
+          method: 'POST',
+          body: JSON.stringify(v),
+        })
+      }
     },
     []
   )
@@ -169,6 +237,10 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
       }
       return { ...s, variants: [...s.variants, variant] }
     })
+    void apiJson<PlatformVariant>('/api/v1/variants', {
+      method: 'POST',
+      body: JSON.stringify(variant),
+    })
   }, [])
 
   const updateVariant = useCallback((id: string, patch: Partial<PlatformVariant>) => {
@@ -178,15 +250,28 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
         v.id === id ? { ...v, ...patch, updatedAt: new Date().toISOString() } : v
       ),
     }))
+    void apiJson<PlatformVariant>(`/api/v1/variants/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
   }, [])
 
-  const addImage = useCallback((image: Omit<DraftImage, 'id' | 'createdAt'>) => {
-    const img: DraftImage = {
-      ...image,
-      id: generateId('img'),
-      createdAt: new Date().toISOString(),
-    }
+  const addImage = useCallback((image: Omit<DraftImage, 'id' | 'createdAt'> | DraftImage) => {
+    const isPersisted = 'id' in image
+    const img: DraftImage = isPersisted
+      ? image
+      : {
+          ...image,
+          id: generateId('img'),
+          createdAt: new Date().toISOString(),
+        }
     setState((s) => ({ ...s, images: [...s.images, img] }))
+    if (!isPersisted) {
+      void apiJson<DraftImage>(`/api/v1/drafts/${image.draftId}/images`, {
+        method: 'POST',
+        body: JSON.stringify(img),
+      })
+    }
     return img
   }, [])
 
@@ -208,11 +293,16 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(),
     }
     setState((s) => ({ ...s, accounts: [...s.accounts, account] }))
+    void apiJson<PlatformAccount>('/api/v1/accounts/connect', {
+      method: 'POST',
+      body: JSON.stringify({ platform, account }),
+    })
     return account
   }, [])
 
   const disconnectAccount = useCallback((id: string) => {
     setState((s) => ({ ...s, accounts: s.accounts.filter((a) => a.id !== id) }))
+    void apiJson<{ ok: boolean }>(`/api/v1/accounts/${id}`, { method: 'DELETE' })
   }, [])
 
   const refreshAccount = useCallback((id: string) => {
@@ -224,19 +314,31 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
           : a
       ),
     }))
+    void apiJson<PlatformAccount>(`/api/v1/accounts/${id}/refresh`, { method: 'POST' })
   }, [])
 
   const createPublishJobs = useCallback(
-    (jobs: Omit<PublishJob, 'id' | 'createdAt' | 'retryCount'>[]) => {
-      const created = jobs.map((j) => ({
-        ...j,
-        id: generateId('job'),
-        retryCount: 0,
-        createdAt: new Date().toISOString(),
-      }))
+    ((jobs: (Omit<PublishJob, 'id' | 'createdAt' | 'retryCount'> | PublishJob)[]) => {
+      const allPersisted = jobs.every((j) => 'id' in j && 'createdAt' in j && 'retryCount' in j)
+      const created = jobs.map((j) =>
+        'id' in j && 'createdAt' in j && 'retryCount' in j
+          ? j
+          : {
+              ...j,
+              id: generateId('job'),
+              retryCount: 0,
+              createdAt: new Date().toISOString(),
+            }
+      ) as PublishJob[]
       setState((s) => ({ ...s, publishJobs: [...created, ...s.publishJobs] }))
+      if (!allPersisted) {
+        void apiJson<PublishJob[]>('/api/v1/publish', {
+          method: 'POST',
+          body: JSON.stringify({ jobs: created }),
+        })
+      }
       return created
-    },
+    }) as DemoStoreContextValue['createPublishJobs'],
     []
   )
 
@@ -245,18 +347,30 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
       ...s,
       publishJobs: s.publishJobs.map((j) => (j.id === id ? { ...j, ...patch } : j)),
     }))
+    void apiJson<PublishJob>(`/api/v1/publish/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
   }, [])
 
   const consumeAiQuota = useCallback((amount = 1) => {
     let allowed = false
+    let nextAiQuotaUsed: number | null = null
     setState((s) => {
       if (!s.user || s.user.aiQuotaUsed + amount > s.user.aiQuotaLimit) return s
       allowed = true
+      nextAiQuotaUsed = Math.min(s.user.aiQuotaLimit, s.user.aiQuotaUsed + amount)
       return {
         ...s,
-        user: { ...s.user, aiQuotaUsed: Math.min(s.user.aiQuotaLimit, s.user.aiQuotaUsed + amount) },
+        user: { ...s.user, aiQuotaUsed: nextAiQuotaUsed },
       }
     })
+    if (nextAiQuotaUsed !== null) {
+      void apiJson<User>('/api/v1/user', {
+        method: 'PATCH',
+        body: JSON.stringify({ aiQuotaUsed: nextAiQuotaUsed }),
+      })
+    }
     return allowed
   }, [])
 
@@ -325,27 +439,6 @@ export function useDemoStore() {
   const ctx = useContext(DemoStoreContext)
   if (!ctx) throw new Error('useDemoStore must be used within DemoStoreProvider')
   return ctx
-}
-
-export function simulatePublish(
-  jobId: string,
-  platform: Platform,
-  update: (id: string, patch: Partial<PublishJob>) => void,
-  onSuccess?: () => void
-) {
-  update(jobId, { status: 'running' as PublishJobStatus })
-  setTimeout(() => {
-    const platformUrl =
-      platform === 'xhs'
-        ? 'https://www.xiaohongshu.com/explore/' + Math.random().toString(36).slice(2, 10)
-        : 'https://mp.weixin.qq.com/s/' + Math.random().toString(36).slice(2, 10)
-    update(jobId, {
-      status: 'succeeded',
-      platformUrl,
-      completedAt: new Date().toISOString(),
-    })
-    onSuccess?.()
-  }, 2000)
 }
 
 export type { PublishMode }

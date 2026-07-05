@@ -11,7 +11,7 @@ import { ComplianceReport } from '@/components/publish/ComplianceReport'
 import { Dialog } from '@/components/ui/Dialog'
 import { XhsNoteCard } from '@/components/platform/XhsNoteCard'
 import { WechatArticlePreview } from '@/components/platform/WechatArticlePreview'
-import { useDemoStore, simulatePublish } from '@/lib/store/DemoStoreContext'
+import { useDemoStore } from '@/lib/store/DemoStoreContext'
 import { scanCompliance } from '@/lib/compliance/scan'
 import type { ComplianceResult, PublishJob, Platform } from '@/types'
 import { Loader2 } from 'lucide-react'
@@ -55,6 +55,7 @@ export default function StudioPublishPage({ params }: { params: Promise<{ draftI
   const [scheduledAt, setScheduledAt] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [publishError, setPublishError] = useState('')
 
   useEffect(() => {
     if (!draft) return
@@ -95,10 +96,11 @@ export default function StudioPublishPage({ params }: { params: Promise<{ draftI
     setConfirmOpen(true)
   }
 
-  const confirmPublish = () => {
+  const confirmPublish = async () => {
     if (!canPublish) return
     setConfirmOpen(false)
     setPublishing(true)
+    setPublishError('')
 
     const jobs = draftVariants
       .filter((v) => selectedAccounts[v.platform])
@@ -118,20 +120,37 @@ export default function StudioPublishPage({ params }: { params: Promise<{ draftI
       return
     }
 
-    const created = createPublishJobs(jobs)
+    const response = await fetch('/api/v1/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobs }),
+    })
+
+    if (!response.ok) {
+      setPublishing(false)
+      setPublishError('发布任务创建失败，请稍后重试')
+      return
+    }
+
+    const created = (await response.json()) as PublishJob[]
+    createPublishJobs(created)
     updateDraft(draftId, { status: mode === 'scheduled' ? 'ready' : 'publishing' })
 
     if (mode === 'immediate') {
-      created.forEach((job) => {
-        simulatePublish(job.id, job.platform, updatePublishJob, () => {
-          updateDraft(draftId, { status: 'published' })
-          updateUser({ firstPublishAt: new Date().toISOString() })
+      const completed = await Promise.all(
+        created.map(async (job) => {
+          const simulateResponse = await fetch(`/api/v1/publish/${job.id}/simulate`, { method: 'POST' })
+          if (!simulateResponse.ok) return null
+          return (await simulateResponse.json()) as PublishJob
         })
+      )
+      completed.filter(Boolean).forEach((job) => {
+        updatePublishJob(job!.id, job!)
       })
-      setTimeout(() => {
-        setPublishing(false)
-        router.push('/logs')
-      }, 2500)
+      updateDraft(draftId, { status: 'published' })
+      updateUser({ firstPublishAt: new Date().toISOString() })
+      setPublishing(false)
+      router.push('/logs')
     } else {
       setPublishing(false)
       router.push('/queue')
@@ -217,6 +236,7 @@ export default function StudioPublishPage({ params }: { params: Promise<{ draftI
             {!hasVariants && (
               <p className="text-sm text-red-600">请先完成平台适配，至少生成一个平台版本后再发布。</p>
             )}
+            {publishError && <p className="text-sm text-red-600">{publishError}</p>}
           </CardBody>
         </Card>
 
