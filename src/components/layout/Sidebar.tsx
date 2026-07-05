@@ -13,6 +13,8 @@ import {
   Sparkles,
   Menu,
   X,
+  UserCircle,
+  CreditCard,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useDemoStore } from '@/lib/store/DemoStoreContext'
@@ -25,6 +27,8 @@ const navItems = [
   { href: '/queue', label: '定时队列', icon: Clock },
   { href: '/accounts', label: '平台账号', icon: Link2 },
   { href: '/logs', label: '发布日志', icon: ScrollText },
+  { href: '/profile', label: '个人主页', icon: UserCircle },
+  { href: '/billing', label: '会员支付', icon: CreditCard },
   { href: '/settings', label: '设置', icon: Settings },
 ]
 

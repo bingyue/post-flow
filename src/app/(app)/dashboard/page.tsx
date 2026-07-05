@@ -42,7 +42,7 @@ export default function DashboardPage() {
             <h2 className="text-lg font-semibold">欢迎回来</h2>
             <p className="text-sm text-slate-500">管理你的创作与发布任务</p>
           </div>
-          <Link href={quotaExceeded ? '/settings' : '/studio/new'}>
+          <Link href={quotaExceeded ? '/billing' : '/studio/new'}>
             <Button disabled={quotaExceeded}>
               <Plus className="h-4 w-4" /> 新建创作
             </Button>
