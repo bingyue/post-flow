@@ -7,6 +7,14 @@ function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 }
 
+function isAdminEmail(email: string) {
+  return (process.env.ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(email)
+}
+
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as {
     email?: string
@@ -31,6 +39,7 @@ export async function POST(req: NextRequest) {
         id: crypto.randomUUID(),
         email,
         passwordHash: await hashPassword(password),
+        isAdmin: isAdminEmail(email),
       },
       select: {
         id: true,

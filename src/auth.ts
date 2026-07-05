@@ -40,6 +40,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           name: user.email,
           plan: user.plan,
+          isAdmin: user.isAdmin,
         }
       },
     }),
@@ -49,6 +50,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id
         token.plan = user.plan ?? 'free'
+        token.isAdmin = user.isAdmin ?? false
       }
       return token
     },
@@ -56,6 +58,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.id = String(token.id)
         session.user.plan = String(token.plan ?? 'free')
+        session.user.isAdmin = Boolean(token.isAdmin)
       }
       return session
     },

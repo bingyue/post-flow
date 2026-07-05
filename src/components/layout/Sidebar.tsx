@@ -15,6 +15,7 @@ import {
   X,
   UserCircle,
   CreditCard,
+  ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useDemoStore } from '@/lib/store/DemoStoreContext'
@@ -66,6 +67,19 @@ export function Sidebar() {
             </Link>
           )
         })}
+        {user?.isAdmin && (
+          <Link
+            href="/admin"
+            onClick={() => setMobileOpen(false)}
+            className={cn(
+              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+              pathname.startsWith('/admin') ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
+            )}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            管理后台
+          </Link>
+        )}
       </nav>
       {user && (
         <div className="border-t border-slate-100 p-4 text-xs text-slate-500">

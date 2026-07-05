@@ -26,6 +26,7 @@ export interface User {
   onboardingStep: number
   primaryPlatform?: Platform
   firstPublishAt?: string
+  isAdmin?: boolean
   isLoggedIn: boolean
 }
 

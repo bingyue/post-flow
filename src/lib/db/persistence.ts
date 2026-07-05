@@ -541,6 +541,7 @@ function buildMockPlatformUrl(platform: Platform) {
 
 function mapUser(user: {
   email: string
+  isAdmin?: boolean
   plan: string
   aiQuotaUsed: number
   aiQuotaLimit: number
@@ -551,6 +552,7 @@ function mapUser(user: {
 }): User {
   return {
     email: user.email,
+    isAdmin: user.isAdmin ?? false,
     plan: user.plan as User['plan'],
     aiQuotaUsed: user.aiQuotaUsed,
     aiQuotaLimit: user.aiQuotaLimit,

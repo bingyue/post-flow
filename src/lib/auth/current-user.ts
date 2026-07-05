@@ -16,6 +16,7 @@ export async function getCurrentUser() {
     select: {
       id: true,
       email: true,
+      isAdmin: true,
       plan: true,
       aiQuotaUsed: true,
       aiQuotaLimit: true,
@@ -37,6 +38,16 @@ export async function requireCurrentUser() {
   return user
 }
 
+export async function requireAdminUser() {
+  const user = await requireCurrentUser()
+
+  if (!user.isAdmin) {
+    throw new Error('FORBIDDEN')
+  }
+
+  return user
+}
+
 export function unauthorizedResponse() {
   return NextResponse.json({ error: '请先登录后再继续操作' }, { status: 401 })
 }
@@ -48,6 +59,10 @@ export function isUnauthorizedError(error: unknown) {
 export function authRouteErrorResponse(error: unknown) {
   if (isUnauthorizedError(error)) {
     return unauthorizedResponse()
+  }
+
+  if (error instanceof Error && error.message === 'FORBIDDEN') {
+    return NextResponse.json({ error: '需要管理员权限' }, { status: 403 })
   }
 
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
